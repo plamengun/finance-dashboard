@@ -1,0 +1,83 @@
+TRUNCATE TABLE financial_data.company_info;
+
+SHOW CREATE TABLE company_info_mv;
+
+DESCRIBE TABLE company_info_mv;
+
+
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS financial_data.company_info_mv
+TO financial_data.company_info_enriched
+AS
+SELECT
+    symbol,
+    toDate(date) AS date,
+    parseDateTimeBestEffort(fetched_at) AS fetched_at,
+    batch_id,
+
+    CAST(`Total Revenue` AS Nullable(Float64))    AS total_revenue,
+    CAST(`Net Income` AS Nullable(Float64))       AS net_income,
+    CAST(`Operating Income` AS Nullable(Float64)) AS operating_income,
+    CAST(`Gross Profit` AS Nullable(Float64))     AS gross_profit,
+
+    -- derived margins (nullable to avoid div-by-zero issues)
+    CAST(`Gross Profit` / NULLIF(`Total Revenue`, 0) AS Nullable(Float64))    AS gross_margin,
+    CAST(`Operating Income` / NULLIF(`Total Revenue`, 0) AS Nullable(Float64)) AS operating_margin,
+    CAST(`Net Income` / NULLIF(`Total Revenue`, 0) AS Nullable(Float64))      AS net_margin
+
+FROM financial_data.company_info
+WHERE
+    `Total Revenue` > 0
+    AND `Net Income` IS NOT NULL
+    AND `Operating Income` IS NOT NULL
+    AND `Gross Profit` IS NOT NULL;
+
+
+
+CREATE OR REPLACE VIEW financial_data.company_info_final AS
+SELECT
+    symbol AS `Symbol`,
+    date AS `Date`,
+    fetched_at AS `Fetched At`,
+    batch_id AS `Batch ID`,
+
+    total_revenue AS `Total Revenue`,
+    net_income AS `Net Income`,
+    operating_income AS `Operating Income`,
+    gross_profit AS `Gross Profit`,
+    gross_margin AS `Gross Margin`,
+    operating_margin AS `Operating Margin`,
+    net_margin AS `Net Margin`,
+
+    -- QoQ growth
+    (total_revenue - lag(total_revenue, 1) OVER (PARTITION BY symbol ORDER BY date))
+        / NULLIF(lag(total_revenue, 1) OVER (PARTITION BY symbol ORDER BY date), 0) AS `Revenue QoQ %`,
+
+    (net_income - lag(net_income, 1) OVER (PARTITION BY symbol ORDER BY date))
+        / NULLIF(lag(net_income, 1) OVER (PARTITION BY symbol ORDER BY date), 0) AS `Net Income QoQ %`,
+
+    (operating_income - lag(operating_income, 1) OVER (PARTITION BY symbol ORDER BY date))
+        / NULLIF(lag(operating_income, 1) OVER (PARTITION BY symbol ORDER BY date), 0) AS `Operating Income QoQ %`,
+
+    -- YoY growth
+    (total_revenue - lag(total_revenue, 4) OVER (PARTITION BY symbol ORDER BY date))
+        / NULLIF(lag(total_revenue, 4) OVER (PARTITION BY symbol ORDER BY date), 0) AS `Revenue YoY %`,
+
+    (net_income - lag(net_income, 4) OVER (PARTITION BY symbol ORDER BY date))
+        / NULLIF(lag(net_income, 4) OVER (PARTITION BY symbol ORDER BY date), 0) AS `Net Income YoY %`,
+
+    (operating_income - lag(operating_income, 4) OVER (PARTITION BY symbol ORDER BY date))
+        / NULLIF(lag(operating_income, 4) OVER (PARTITION BY symbol ORDER BY date), 0) AS `Operating Income YoY %`
+
+FROM financial_data.company_info_enriched
+ORDER BY `Symbol`, `Date`;
+
+
+
+podman exec -it clickhouse clickhouse-client \
+  --query="SELECT * FROM financial_data.company_info_final FORMAT Parquet" \
+  > dashboard_data.parquet
+
+
+
+  

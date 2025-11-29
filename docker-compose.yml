@@ -1,0 +1,11 @@
+version: "3"
+
+networks:
+  astro-network:
+    driver: bridge
+
+services:
+  # This file serves as a base for Astro CLI
+  # The actual Airflow services will be added by Astro CLI
+  # when you run: astro dev start
+  # Additional services (Kafka, ClickHouse, etc.) are in docker-compose.override.yml

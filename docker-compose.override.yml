@@ -1,0 +1,147 @@
+networks:
+  astro-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: astro-network
+
+services:
+  api-server:
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+  scheduler:
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+  triggerer:
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+  # Zookeeper service
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    hostname: zookeeper
+    container_name: zookeeper
+    networks:
+      - astro-network
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    restart: unless-stopped
+    dns:
+      - 169.254.1.2
+      - 8.8.8.8
+
+  # Kafka service
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    networks:
+      - astro-network
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://host.containers.internal:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    restart: unless-stopped
+    dns:
+      - 169.254.1.2
+      - 8.8.8.8
+
+  # Kafka UI (for monitoring Kafka)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    networks:
+      - astro-network
+    ports:
+      - "8084:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_READONLY: false
+      KAFKA_CLUSTERS_0_DISABLE_LOGS: false
+      KAFKA_CLUSTERS_0_TOPIC_DELETE_ENABLED: true
+      KAFKA_CLUSTERS_0_TOPIC_CREATION_ENABLED: true
+    restart: unless-stopped
+    dns:
+      - 169.254.1.2
+      - 8.8.8.8
+
+  # ClickHouse service
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    hostname: clickhouse
+    container_name: clickhouse
+    depends_on:
+      - kafka
+    networks:
+      - astro-network
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: financial_data
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: unless-stopped
+    dns:
+      - 169.254.1.2
+      
+  # Streamlit service
+  streamlit:
+    image: python:3.10-slim
+    container_name: streamlit
+    working_dir: /app
+    volumes:
+      - ./streamlit_app:/app
+    ports:
+      - "8501:8501"
+    networks:
+      - astro-network
+    command: >
+      bash -c "pip install --no-cache-dir -r requirements.txt streamlit &&
+               streamlit run app.py --server.port=8501 --server.address=0.0.0.0"
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+volumes:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
+  clickhouse-data:

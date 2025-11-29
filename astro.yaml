@@ -1,0 +1,81 @@
+# Astro CLI configuration file
+# This file configures how Astro CLI manages your project
+
+# The name of your project
+name: data_eng
+
+# The version of your project
+version: 1.0.0
+
+# The description of your project
+description: "Data Engineering Project with Airflow, Kafka, and ClickHouse"
+
+# The maintainer of your project
+maintainers:
+  - name: "Data Engineering Team"
+
+# The repository of your project
+repository: ""
+
+# The documentation of your project
+documentation: ""
+
+# The homepage of your project
+homepage: ""
+
+# The license of your project
+license: ""
+
+# The tags of your project
+tags: []
+
+# The connections of your project
+connections:
+  - name: "clickhouse_default"
+    type: "clickhouse"
+    host: "clickhouse"
+    port: 9000
+    database: "financial_data"
+    user: "default"
+    password: ""
+
+  - name: "kafka_default"
+    type: "kafka"
+    bootstrap_servers: "kafka:29092"
+
+# The variables of your project
+variables:
+  - name: "kafka_bootstrap_servers"
+    value: "kafka:29092"
+  - name: "clickhouse_host"
+    value: "clickhouse"
+  - name: "clickhouse_port"
+    value: "9000"
+  - name: "clickhouse_database"
+    value: "financial_data"
+
+# The environment of your project
+environment:
+  - name: "dev"
+    variables:
+      - name: "environment"
+        value: "development"
+  - name: "prod"
+    variables:
+      - name: "environment"
+        value: "production"
+
+# Local development configuration
+deployment:
+  config:
+    # DNS configuration for external API access
+    dns:
+      - "169.254.1.2"  # Windows host DNS
+      - "8.8.8.8"      # Google DNS as backup
+    
+    # Environment variables for DNS
+    environment_variables:
+      - name: "DNS_SERVER"
+        value: "169.254.1.2"
+      - name: "EXTRA_DNS"
+        value: "8.8.8.8"
