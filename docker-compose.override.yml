@@ -5,18 +5,52 @@ networks:
       com.docker.network.bridge.name: astro-network
 
 services:
-  api-server:
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-  scheduler:
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-  triggerer:
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+
+  airflow-postgres:
+    image: postgres:13
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    networks:
+      - astro-network
+
+  airflow-scheduler:
+    image: apache/airflow:2.5.0
+    container_name: airflow-scheduler
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    depends_on:
+      - airflow-postgres
+    networks:
+      - astro-network
+    command: ["scheduler"]
+
+  airflow-worker:
+    image: apache/airflow:2.5.0
+    container_name: airflow-worker
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    depends_on:
+      - airflow-postgres
+    networks:
+      - astro-network
+    command: ["celery", "worker"]
+
+  airflow-webserver:
+    image: apache/airflow:2.5.0
+    container_name: airflow-webserver
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    ports:
+      - "8080:8080"
+    depends_on:
+      - airflow-postgres
+      - airflow-scheduler
+    networks:
+      - astro-network
+      
   # Zookeeper service
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
